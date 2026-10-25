@@ -44,7 +44,7 @@ const blogSchema = new mongoose.Schema(
 );
 
 // Auto-generate slug, excerpt, and readTime before saving if not provided
-blogSchema.pre("save", function (next) {
+blogSchema.pre("save", function () {
     if (!this.slug && this.title) {
         this.slug = this.title
             .toLowerCase()
@@ -64,8 +64,6 @@ blogSchema.pre("save", function (next) {
         const minutes = Math.max(1, Math.ceil(wordCount / 200));
         this.readTime = `${minutes} min read`;
     }
-
-    next();
 });
 
 const Blog = mongoose.model("Blog", blogSchema);

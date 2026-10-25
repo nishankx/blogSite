@@ -26,7 +26,7 @@ export async function getBlogs(req, res) {
         });
     } catch (err) {
         console.error("Error in getBlogs Controller:", err);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, message: err.message || "Internal server error" });
     }
 }
 
@@ -59,7 +59,7 @@ export async function getBlog(req, res) {
             return res.status(400).json({ success: false, message: "Invalid blog ID format" });
         }
         console.error("Error in getBlog controller:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, message: error.message || "Internal server error" });
     }
 }
 
@@ -120,7 +120,7 @@ export async function postBlog(req, res) {
             return res.status(400).json({ success: false, message: error.message });
         }
         console.error("Error in postBlog controller:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, message: error.message || "Internal server error" });
     }
 }
 
@@ -190,7 +190,7 @@ export async function updateBlog(req, res) {
             return res.status(400).json({ success: false, message: "Invalid blog ID format" });
         }
         console.error("Error in updateBlog controller:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, message: error.message || "Internal server error" });
     }
 }
 
@@ -219,6 +219,6 @@ export async function deleteBlog(req, res) {
             return res.status(400).json({ success: false, message: "Invalid blog ID format" });
         }
         console.error("Error in deleteBlog controller:", error);
-        res.status(500).json({ success: false, message: "Internal server error" });
+        res.status(500).json({ success: false, message: error.message || "Internal server error" });
     }
 }
