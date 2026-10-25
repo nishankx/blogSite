@@ -77,10 +77,17 @@ export async function subscribeNewsletter(req, res) {
 
             // Send Welcome Email
             try {
-                const fromEmail = process.env.RESEND_FROM_EMAIL || 'Nishan <onboarding@resend.dev>';
+                // Resend requires a verified custom domain. If a free provider like @gmail.com is set,
+                // fallback to Resend's default onboarding address to prevent 403 validation errors.
+                let fromEmail = process.env.RESEND_FROM_EMAIL || 'Nishan <onboarding@resend.dev>';
+                if (/@(gmail|yahoo|outlook|hotmail)\.com/i.test(fromEmail)) {
+                    fromEmail = 'Nishan <onboarding@resend.dev>';
+                }
+
                 await resend.emails.send({
                     from: fromEmail,
                     to: normalizedEmail,
+                    reply_to: process.env.RESEND_REPLY_TO || 'nishankashyapofficial@gmail.com',
                     subject: "Welcome to my newsletter! ✨",
                     html: `
                         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 36px 24px; background-color: #0d0d0e; color: #ffffff; border-radius: 16px; border: 1px solid #27272a;">
