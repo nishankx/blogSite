@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Blog from '../models/Blog.js';
+import Subscriber from '../models/Subscriber.js';
+import { broadcastBlogEmail } from '../utils/resendHelper.js';
 
 // GET all blogs
 export async function getBlogs(req, res) {
@@ -66,7 +68,7 @@ export async function getBlog(req, res) {
 // POST create blog (Admin protected)
 export async function postBlog(req, res) {
     try {
-        const { title, content, excerpt, coverImage, tags, readTime, slug, isPublished } = req.body;
+        const { title, content, excerpt, coverImage, tags, readTime, slug, isPublished, notifySubscribers } = req.body;
 
         // Request Body Validation
         if (!title || typeof title !== 'string' || !title.trim()) {
@@ -103,11 +105,25 @@ export async function postBlog(req, res) {
 
         const savedBlog = await blog.save();
 
+        // Broadcast to newsletter subscribers if requested
+        let subscribersNotified = 0;
+        if (notifySubscribers && savedBlog.isPublished) {
+            try {
+                const subscribers = await Subscriber.find({ status: 'active' });
+                subscribersNotified = await broadcastBlogEmail(savedBlog, subscribers);
+            } catch (notifyErr) {
+                console.error("Failed to notify subscribers:", notifyErr.message);
+            }
+        }
+
         res.status(201).json({
             success: true,
-            message: "Blog created successfully",
+            message: notifySubscribers && subscribersNotified > 0
+                ? `Blog created and ${subscribersNotified} subscriber(s) notified!`
+                : "Blog created successfully",
             savedBlog,
             blog: savedBlog,
+            subscribersNotified,
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -134,7 +150,7 @@ export async function updateBlog(req, res) {
             return res.status(400).json({ success: false, message: "Invalid blog ID format" });
         }
 
-        const { title, content, excerpt, coverImage, tags, readTime, slug, isPublished } = req.body;
+        const { title, content, excerpt, coverImage, tags, readTime, slug, isPublished, notifySubscribers } = req.body;
 
         // Validation for fields being updated
         if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
@@ -170,11 +186,25 @@ export async function updateBlog(req, res) {
             return res.status(404).json({ success: false, message: "Blog not found" });
         }
 
+        // Broadcast to newsletter subscribers if requested
+        let subscribersNotified = 0;
+        if (notifySubscribers && updatedBlog.isPublished) {
+            try {
+                const subscribers = await Subscriber.find({ status: 'active' });
+                subscribersNotified = await broadcastBlogEmail(updatedBlog, subscribers);
+            } catch (notifyErr) {
+                console.error("Failed to notify subscribers on update:", notifyErr.message);
+            }
+        }
+
         res.status(200).json({
             success: true,
-            message: "Blog updated successfully",
+            message: notifySubscribers && subscribersNotified > 0
+                ? `Blog updated and ${subscribersNotified} subscriber(s) notified!`
+                : "Blog updated successfully",
             updatedBlog,
             blog: updatedBlog,
+            subscribersNotified,
         });
     } catch (error) {
         if (error.code === 11000) {

@@ -1,11 +1,10 @@
-import { Resend } from 'resend';
 import Subscriber from '../models/Subscriber.js';
-
-const getResendClient = () => {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) return null;
-    return new Resend(apiKey);
-};
+import {
+    getResendClient,
+    getSafeFromEmail,
+    getReplyToEmail,
+    addContactToAudience,
+} from '../utils/resendHelper.js';
 
 export async function subscribeNewsletter(req, res) {
     try {
@@ -54,40 +53,27 @@ export async function subscribeNewsletter(req, res) {
 
         // 2. Resend Integration
         const resend = getResendClient();
-        let resendContactId = null;
 
         if (resend) {
-            // Add to Audience if RESEND_AUDIENCE_ID is provided
-            if (process.env.RESEND_AUDIENCE_ID) {
-                try {
-                    const contactRes = await resend.contacts.create({
-                        email: normalizedEmail,
-                        unsubscribed: false,
-                        audienceId: process.env.RESEND_AUDIENCE_ID,
-                    });
-                    if (contactRes?.data?.id) {
-                        resendContactId = contactRes.data.id;
-                        subscriber.resendContactId = resendContactId;
-                        await subscriber.save();
-                    }
-                } catch (contactErr) {
-                    console.warn("Resend contact creation notice:", contactErr.message);
+            // Auto sync to Resend Audience if configured
+            const audienceId = process.env.RESEND_AUDIENCE_ID;
+            if (audienceId) {
+                const contactId = await addContactToAudience(normalizedEmail, audienceId);
+                if (contactId) {
+                    subscriber.resendContactId = contactId;
+                    await subscriber.save();
                 }
             }
 
             // Send Welcome Email
             try {
-                // Resend requires a verified custom domain. If a free provider like @gmail.com is set,
-                // fallback to Resend's default onboarding address to prevent 403 validation errors.
-                let fromEmail = process.env.RESEND_FROM_EMAIL || 'Nishan <onboarding@resend.dev>';
-                if (/@(gmail|yahoo|outlook|hotmail)\.com/i.test(fromEmail)) {
-                    fromEmail = 'Nishan <onboarding@resend.dev>';
-                }
+                const fromEmail = getSafeFromEmail();
+                const replyTo = getReplyToEmail();
 
                 await resend.emails.send({
                     from: fromEmail,
                     to: normalizedEmail,
-                    reply_to: process.env.RESEND_REPLY_TO || 'nishankashyapofficial@gmail.com',
+                    reply_to: replyTo,
                     subject: "Welcome to my newsletter! ✨",
                     html: `
                         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 36px 24px; background-color: #0d0d0e; color: #ffffff; border-radius: 16px; border: 1px solid #27272a;">
@@ -136,6 +122,72 @@ export async function subscribeNewsletter(req, res) {
         return res.status(500).json({
             success: false,
             message: error.message || "Failed to process newsletter subscription.",
+        });
+    }
+}
+
+/**
+ * Sync all existing MongoDB subscribers to a Resend Audience
+ */
+export async function syncSubscribersToAudience(req, res) {
+    try {
+        const audienceId = process.env.RESEND_AUDIENCE_ID;
+        if (!audienceId) {
+            return res.status(400).json({
+                success: false,
+                message: "RESEND_AUDIENCE_ID is not configured in backend environment variables.",
+            });
+        }
+
+        const activeSubscribers = await Subscriber.find({ status: 'active' });
+        let syncedCount = 0;
+
+        for (const sub of activeSubscribers) {
+            const contactId = await addContactToAudience(sub.email, audienceId);
+            if (contactId) {
+                sub.resendContactId = contactId;
+                await sub.save();
+                syncedCount++;
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Successfully synced ${syncedCount} of ${activeSubscribers.length} subscribers to Resend Audience.`,
+            totalActive: activeSubscribers.length,
+            syncedCount,
+        });
+    } catch (error) {
+        console.error("Error in syncSubscribersToAudience:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to sync subscribers to Resend Audience.",
+        });
+    }
+}
+
+/**
+ * Get subscriber statistics (Admin protected)
+ */
+export async function getSubscribersStats(req, res) {
+    try {
+        const total = await Subscriber.countDocuments({});
+        const active = await Subscriber.countDocuments({ status: 'active' });
+        const recent = await Subscriber.find({ status: 'active' })
+            .sort({ createdAt: -1 })
+            .limit(20)
+            .select('email createdAt source');
+
+        return res.status(200).json({
+            success: true,
+            total,
+            active,
+            subscribers: recent,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to fetch subscriber stats.",
         });
     }
 }
