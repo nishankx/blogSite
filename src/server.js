@@ -11,6 +11,13 @@ const PORT = process.env.PORT || 5001
 
 app.use(express.json())
 app.use(cors());
+
+// Normalize duplicate slashes in incoming requests
+app.use((req, res, next) => {
+    req.url = req.url.replace(/\/{2,}/g, '/');
+    next();
+});
+
 app.use('/blogs', blogRouter)
 
 connectDB().then(() => {
