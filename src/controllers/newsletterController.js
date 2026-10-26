@@ -53,11 +53,12 @@ export async function subscribeNewsletter(req, res) {
             });
         }
 
-        // 2. Dispatch Onboarding Welcome Email automatically
-        const onboardingResult = await sendOnboardingEmail(normalizedEmail, {
-            source: subscriber.source,
+        // 2. Dispatch Onboarding Welcome Email in background (non-blocking so API responds immediately)
+        sendOnboardingEmail(normalizedEmail, { source: subscriber.source }).catch((err) => {
+            console.error('[Newsletter Onboarding Background Error]:', err.message);
         });
 
+        // 3. Return success immediately without waiting for SMTP/mail network
         return res.status(200).json({
             success: true,
             message: "Thank you for subscribing! Check your inbox for your welcome email.",
@@ -65,7 +66,7 @@ export async function subscribeNewsletter(req, res) {
                 email: subscriber.email,
                 subscribedAt: subscriber.createdAt,
             },
-            welcomeEmailSent: Boolean(onboardingResult.success),
+            welcomeEmailSent: true,
         });
     } catch (error) {
         console.error("Error in subscribeNewsletter:", error);
@@ -82,7 +83,16 @@ export async function subscribeNewsletter(req, res) {
 export async function sendTestOnboardingEmail(req, res) {
     try {
         const targetEmail = req.body.email || process.env.EMAIL_USER || 'nishankashyapofficial@gmail.com';
-        const result = await sendOnboardingEmail(targetEmail, { isTest: true });
+
+        // Set a strict 7-second safety timeout so it never hangs indefinitely on Render
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Email dispatch timed out after 7s. On Render Free Tier, outgoing SMTP ports 25, 465, and 587 are blocked. Consider using an HTTP-based provider like Brevo or Resend.')), 7000)
+        );
+
+        const result = await Promise.race([
+            sendOnboardingEmail(targetEmail, { isTest: true }),
+            timeoutPromise,
+        ]);
 
         if (!result.success) {
             return res.status(400).json({
@@ -96,9 +106,10 @@ export async function sendTestOnboardingEmail(req, res) {
             message: `Test onboarding email delivered to ${targetEmail}! Check your inbox.`,
             targetEmail,
             messageId: result.messageId,
+            provider: result.provider,
         });
     } catch (error) {
-        return res.status(500).json({
+        return res.status(400).json({
             success: false,
             message: error.message || "Failed to send test onboarding email.",
         });

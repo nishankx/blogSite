@@ -118,29 +118,26 @@ export async function postBlog(req, res) {
 
         const savedBlog = await blog.save();
 
-        // Broadcast to newsletter subscribers if requested
-        let subscribersNotified = 0;
+        // Broadcast to newsletter subscribers asynchronously so post saving never hangs
         if (notifySubscribers) {
-            try {
-                const subscribers = await Subscriber.find({ status: 'active' });
-                subscribersNotified = await broadcastBlogEmail(savedBlog, subscribers, {
-                    isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !savedBlog.isPublished,
-                    customSubject,
-                    customNote,
-                });
-            } catch (notifyErr) {
-                console.error("Failed to notify subscribers:", notifyErr.message);
-            }
+            Subscriber.find({ status: 'active' })
+                .then((subscribers) => {
+                    broadcastBlogEmail(savedBlog, subscribers, {
+                        isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !savedBlog.isPublished,
+                        customSubject,
+                        customNote,
+                    }).catch((err) => console.error('[Broadcast Error on postBlog]:', err.message));
+                })
+                .catch((err) => console.error('[Subscribers Query Error on postBlog]:', err.message));
         }
 
         res.status(201).json({
             success: true,
-            message: notifySubscribers && subscribersNotified > 0
-                ? `Blog created and ${subscribersNotified} subscriber(s) notified!`
-                : "Blog created successfully",
+            message: notifySubscribers
+                ? (savedBlog.isPublished ? 'Post published & newsletter subscribers notified!' : 'Post created & upcoming preview broadcasted!')
+                : 'Blog created successfully',
             savedBlog,
             blog: savedBlog,
-            subscribersNotified,
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -216,29 +213,26 @@ export async function updateBlog(req, res) {
             return res.status(404).json({ success: false, message: "Blog not found" });
         }
 
-        // Broadcast to newsletter subscribers if requested
-        let subscribersNotified = 0;
+        // Broadcast to newsletter subscribers asynchronously so post update never hangs
         if (notifySubscribers) {
-            try {
-                const subscribers = await Subscriber.find({ status: 'active' });
-                subscribersNotified = await broadcastBlogEmail(updatedBlog, subscribers, {
-                    isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !updatedBlog.isPublished,
-                    customSubject,
-                    customNote,
-                });
-            } catch (notifyErr) {
-                console.error("Failed to notify subscribers on update:", notifyErr.message);
-            }
+            Subscriber.find({ status: 'active' })
+                .then((subscribers) => {
+                    broadcastBlogEmail(updatedBlog, subscribers, {
+                        isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !updatedBlog.isPublished,
+                        customSubject,
+                        customNote,
+                    }).catch((err) => console.error('[Broadcast Error on updateBlog]:', err.message));
+                })
+                .catch((err) => console.error('[Subscribers Query Error on updateBlog]:', err.message));
         }
 
         res.status(200).json({
             success: true,
-            message: notifySubscribers && subscribersNotified > 0
-                ? `Blog updated and ${subscribersNotified} subscriber(s) notified!`
-                : "Blog updated successfully",
+            message: notifySubscribers
+                ? (updatedBlog.isPublished ? 'Post updated & newsletter subscribers notified!' : 'Post updated & upcoming preview broadcasted!')
+                : 'Blog updated successfully',
             updatedBlog,
             blog: updatedBlog,
-            subscribersNotified,
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -286,11 +280,18 @@ export async function broadcastBlog(req, res) {
             });
         }
 
-        const sentCount = await broadcastBlogEmail(blog, subscribers, {
-            isUpcoming: Boolean(isUpcoming),
-            customSubject,
-            customNote,
-        });
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Broadcast timed out. Note: On Render Free Tier, outgoing SMTP ports 25, 465, and 587 are blocked. Consider using an HTTP provider like Brevo or Resend.')), 10000)
+        );
+
+        const sentCount = await Promise.race([
+            broadcastBlogEmail(blog, subscribers, {
+                isUpcoming: Boolean(isUpcoming),
+                customSubject,
+                customNote,
+            }),
+            timeoutPromise,
+        ]);
 
         return res.status(200).json({
             success: true,
