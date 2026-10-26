@@ -4,7 +4,6 @@ import {
     getBlog,
     postBlog,
     updateBlog,
-    broadcastBlog,
     deleteBlog,
 } from '../controllers/blogControllers.js';
 import { requireAdminAuth } from '../middleware/authMiddleware.js';
@@ -24,7 +23,6 @@ router.get('/:id', getBlog);
 // Admin-protected routes
 router.post('/', requireAdminAuth, postBlog);
 router.put('/:id', requireAdminAuth, updateBlog);
-router.post('/:id/broadcast', requireAdminAuth, broadcastBlog);
 router.delete('/:id', requireAdminAuth, deleteBlog);
 
 export default router;

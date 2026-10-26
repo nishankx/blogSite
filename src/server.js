@@ -2,7 +2,6 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import blogRouter from './routes/blogRoutes.js'
-import newsletterRouter from './routes/newsletterRoutes.js'
 import { connectDB } from './config/db.js'
 
 dotenv.config()
@@ -20,7 +19,6 @@ app.use((req, res, next) => {
 });
 
 app.use('/blogs', blogRouter)
-app.use('/newsletter', newsletterRouter)
 
 connectDB().then(() => {
     app.listen(PORT, () => {

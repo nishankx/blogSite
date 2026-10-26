@@ -1,7 +1,5 @@
 import mongoose from 'mongoose';
 import Blog from '../models/Blog.js';
-import Subscriber from '../models/Subscriber.js';
-import { broadcastBlogEmail } from '../utils/mailerHelper.js';
 
 // GET all blogs
 export async function getBlogs(req, res) {
@@ -77,10 +75,6 @@ export async function postBlog(req, res) {
             readTime,
             slug,
             isPublished,
-            notifySubscribers,
-            isUpcoming,
-            customSubject,
-            customNote,
         } = req.body;
 
         // Request Body Validation
@@ -118,24 +112,9 @@ export async function postBlog(req, res) {
 
         const savedBlog = await blog.save();
 
-        // Broadcast to newsletter subscribers asynchronously so post saving never hangs
-        if (notifySubscribers) {
-            Subscriber.find({ status: 'active' })
-                .then((subscribers) => {
-                    broadcastBlogEmail(savedBlog, subscribers, {
-                        isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !savedBlog.isPublished,
-                        customSubject,
-                        customNote,
-                    }).catch((err) => console.error('[Broadcast Error on postBlog]:', err.message));
-                })
-                .catch((err) => console.error('[Subscribers Query Error on postBlog]:', err.message));
-        }
-
         res.status(201).json({
             success: true,
-            message: notifySubscribers
-                ? (savedBlog.isPublished ? 'Post published & newsletter subscribers notified!' : 'Post created & upcoming preview broadcasted!')
-                : 'Blog created successfully',
+            message: 'Blog created successfully',
             savedBlog,
             blog: savedBlog,
         });
@@ -173,10 +152,6 @@ export async function updateBlog(req, res) {
             readTime,
             slug,
             isPublished,
-            notifySubscribers,
-            isUpcoming,
-            customSubject,
-            customNote,
         } = req.body;
 
         // Validation for fields being updated
@@ -213,24 +188,9 @@ export async function updateBlog(req, res) {
             return res.status(404).json({ success: false, message: "Blog not found" });
         }
 
-        // Broadcast to newsletter subscribers asynchronously so post update never hangs
-        if (notifySubscribers) {
-            Subscriber.find({ status: 'active' })
-                .then((subscribers) => {
-                    broadcastBlogEmail(updatedBlog, subscribers, {
-                        isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !updatedBlog.isPublished,
-                        customSubject,
-                        customNote,
-                    }).catch((err) => console.error('[Broadcast Error on updateBlog]:', err.message));
-                })
-                .catch((err) => console.error('[Subscribers Query Error on updateBlog]:', err.message));
-        }
-
         res.status(200).json({
             success: true,
-            message: notifySubscribers
-                ? (updatedBlog.isPublished ? 'Post updated & newsletter subscribers notified!' : 'Post updated & upcoming preview broadcasted!')
-                : 'Blog updated successfully',
+            message: 'Blog updated successfully',
             updatedBlog,
             blog: updatedBlog,
         });
@@ -249,63 +209,6 @@ export async function updateBlog(req, res) {
         }
         console.error("Error in updateBlog controller:", error);
         res.status(500).json({ success: false, message: error.message || "Internal server error" });
-    }
-}
-
-// POST broadcast existing blog to subscribers (Admin protected)
-export async function broadcastBlog(req, res) {
-    try {
-        const { id } = req.params;
-        const { isUpcoming = false, customSubject = '', customNote = '' } = req.body;
-
-        let blog = null;
-        if (mongoose.Types.ObjectId.isValid(id)) {
-            blog = await Blog.findById(id);
-        }
-        if (!blog) {
-            blog = await Blog.findOne({ slug: id });
-        }
-
-        if (!blog) {
-            return res.status(404).json({ success: false, message: "Blog not found to broadcast" });
-        }
-
-        const subscribers = await Subscriber.find({ status: 'active' });
-        if (subscribers.length === 0) {
-            return res.status(200).json({
-                success: true,
-                message: "No active subscribers found in database to broadcast to.",
-                sentCount: 0,
-                totalSubscribers: 0,
-            });
-        }
-
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Broadcast timed out. Note: On Render Free Tier, outgoing SMTP ports 25, 465, and 587 are blocked. Consider using an HTTP provider like Brevo or Resend.')), 10000)
-        );
-
-        const sentCount = await Promise.race([
-            broadcastBlogEmail(blog, subscribers, {
-                isUpcoming: Boolean(isUpcoming),
-                customSubject,
-                customNote,
-            }),
-            timeoutPromise,
-        ]);
-
-        return res.status(200).json({
-            success: true,
-            message: `Broadcast sent to ${sentCount} of ${subscribers.length} subscriber(s)!`,
-            sentCount,
-            totalSubscribers: subscribers.length,
-            blogTitle: blog.title,
-        });
-    } catch (error) {
-        console.error("Error in broadcastBlog controller:", error);
-        return res.status(500).json({
-            success: false,
-            message: error.message || "Failed to broadcast blog.",
-        });
     }
 }
 
