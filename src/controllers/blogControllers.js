@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Blog from '../models/Blog.js';
+import Subscriber from '../models/Subscriber.js';
+import { broadcastPostEmail } from '../utils/mailService.js';
 
 // GET all blogs
 export async function getBlogs(req, res) {
@@ -75,6 +77,7 @@ export async function postBlog(req, res) {
             readTime,
             slug,
             isPublished,
+            broadcast = false,
         } = req.body;
 
         // Request Body Validation
@@ -112,9 +115,18 @@ export async function postBlog(req, res) {
 
         const savedBlog = await blog.save();
 
+        // If broadcast is requested, dispatch to newsletter subscribers in the background
+        if (broadcast && savedBlog.isPublished) {
+            Subscriber.find({ status: 'active' })
+                .then((subscribers) => broadcastPostEmail(savedBlog, subscribers))
+                .catch((err) => console.error('[Broadcast Error on postBlog]:', err.message));
+        }
+
         res.status(201).json({
             success: true,
-            message: 'Blog created successfully',
+            message: broadcast
+                ? 'Blog published & broadcast dispatched to newsletter subscribers!'
+                : 'Blog created successfully',
             savedBlog,
             blog: savedBlog,
         });
@@ -152,6 +164,7 @@ export async function updateBlog(req, res) {
             readTime,
             slug,
             isPublished,
+            broadcast = false,
         } = req.body;
 
         // Validation for fields being updated
@@ -188,9 +201,18 @@ export async function updateBlog(req, res) {
             return res.status(404).json({ success: false, message: "Blog not found" });
         }
 
+        // If broadcast is requested, dispatch to newsletter subscribers in the background
+        if (broadcast && updatedBlog.isPublished) {
+            Subscriber.find({ status: 'active' })
+                .then((subscribers) => broadcastPostEmail(updatedBlog, subscribers))
+                .catch((err) => console.error('[Broadcast Error on updateBlog]:', err.message));
+        }
+
         res.status(200).json({
             success: true,
-            message: 'Blog updated successfully',
+            message: broadcast
+                ? 'Blog updated & broadcast dispatched to newsletter subscribers!'
+                : 'Blog updated successfully',
             updatedBlog,
             blog: updatedBlog,
         });
@@ -209,6 +231,48 @@ export async function updateBlog(req, res) {
         }
         console.error("Error in updateBlog controller:", error);
         res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    }
+}
+
+// POST broadcast existing blog to subscribers (Admin protected)
+export async function broadcastBlog(req, res) {
+    try {
+        const { id } = req.params;
+
+        let blog = null;
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            blog = await Blog.findById(id);
+        }
+        if (!blog) {
+            blog = await Blog.findOne({ slug: id });
+        }
+
+        if (!blog) {
+            return res.status(404).json({ success: false, message: 'Blog not found' });
+        }
+
+        const subscribers = await Subscriber.find({ status: 'active' });
+        if (subscribers.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'No active subscribers found in database to broadcast to.',
+                subscriberCount: 0,
+            });
+        }
+
+        // Dispatch in background so the response returns immediately without hanging
+        broadcastPostEmail(blog, subscribers).catch((err) =>
+            console.error('[Manual Broadcast Error]:', err.message)
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Broadcast dispatched for ${subscribers.length} subscriber(s)!`,
+            subscriberCount: subscribers.length,
+        });
+    } catch (err) {
+        console.error('Error in broadcastBlog controller:', err);
+        return res.status(500).json({ success: false, message: 'Failed to broadcast blog' });
     }
 }
 
