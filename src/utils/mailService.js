@@ -115,59 +115,50 @@ export async function sendWelcomeEmail(toEmail) {
 
     const html = `
     <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to the Newsletter</title>
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #050505; color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #050505; padding: 40px 15px;">
-            <tr>
-                <td align="center">
-                    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: #0d0d0f; border: 1px solid #27272a; border-radius: 16px; overflow: hidden; padding: 36px 30px;">
-                        <tr>
-                            <td>
-                                <div style="display: inline-block; padding: 4px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 999px; font-size: 11px; font-family: monospace; letter-spacing: 0.15em; text-transform: uppercase; color: #a1a1aa; margin-bottom: 20px;">
-                                    WELCOME ABOARD
-                                </div>
-                                <h1 style="margin: 0 0 16px 0; font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">
-                                    Hey there! Glad to have you here.
-                                </h1>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Welcome to the Newsletter</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #050505; color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #050505; padding: 40px 15px;">
+                <tr>
+                    <td align="center">
+                        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: #0d0d0f; border: 1px solid #27272a; border-radius: 16px; overflow: hidden; padding: 36px 30px;">
+                            <tr>
+                                <td>
+                                    <div style="display: inline-block; padding: 4px 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 999px; font-size: 11px; font-family: monospace; letter-spacing: 0.15em; text-transform: uppercase; color: #a1a1aa; margin-bottom: 20px;">
+                                        WELCOME ABOARD
+                                    </div>
+                                    <h1 style="margin: 0 0 16px 0; font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">
+                                        Hey there! Glad to have you here.
+                                    </h1>
 
-                                <div style="margin: 20px 0 24px 0; padding: 18px 22px; background: rgba(255, 255, 255, 0.04); border-left: 3px solid #ffffff; border-radius: 8px;">
-                                    <p style="margin: 0; font-size: 16px; font-style: italic; color: #f4f4f5; line-height: 1.6;">
-                                        “Documenting the questions I ask, the things I build, the ideas I explore, and the person I become along the way.”
+                                    <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 16px 0;">
+                                        Thank you for subscribing to my newsletter.
                                     </p>
-                                </div>
-
-                                <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 16px 0;">
-                                    Thank you for subscribing to my newsletter. You're now on the list to receive engineering write-ups, deep dives into full-stack systems, machine learning ideas, and unfiltered build logs straight to your inbox.
-                                </p>
-                                <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 28px 0;">
-                                    I only write when I have something meaningful and practical to share — no spam, no fluff.
-                                </p>
-                                <div style="margin-bottom: 16px;">
-                                    <a href="${blogsUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 26px; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);">
-                                        Explore the Articles →
-                                    </a>
-                                </div>
-                                <p style="font-size: 12px; color: #71717a; margin: 0 0 28px 0; word-break: break-all;">
-                                    Direct link: <a href="${blogsUrl}" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">${blogsUrl}</a>
-                                </p>
-                                <hr style="border: none; border-top: 1px solid #27272a; margin: 28px 0;" />
-                                <p style="font-size: 12px; color: #71717a; margin: 0; line-height: 1.6;">
-                                    Sent with ❤️ by <strong>Nishan Kashyap</strong><br />
-                                    Software Engineer & Builder • <a href="${baseUrl}" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">Portfolio</a>
-                                </p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
+                                    <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 28px 0;">
+                                        I only write when I have something meaningful and practical to share;  no spam, no fluff.
+                                    </p>
+                                    <div style="margin-bottom: 16px;">
+                                        <a href="${blogsUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 26px; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);">
+                                            Explore the Articles →
+                                        </a>
+                                    </div>
+                                    <hr style="border: none; border-top: 1px solid #27272a; margin: 28px 0;" />
+                                    <p style="font-size: 12px; color: #71717a; margin: 0; line-height: 1.6;">
+                                        Sent by <strong>Nishan Kashyap</strong><br />
+                                        Software Engineer & Builder • <a href="${baseUrl}" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">Portfolio</a>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
     `;
 
     return sendEmail({
