@@ -68,7 +68,20 @@ export async function getBlog(req, res) {
 // POST create blog (Admin protected)
 export async function postBlog(req, res) {
     try {
-        const { title, content, excerpt, coverImage, tags, readTime, slug, isPublished, notifySubscribers } = req.body;
+        const {
+            title,
+            content,
+            excerpt,
+            coverImage,
+            tags,
+            readTime,
+            slug,
+            isPublished,
+            notifySubscribers,
+            isUpcoming,
+            customSubject,
+            customNote,
+        } = req.body;
 
         // Request Body Validation
         if (!title || typeof title !== 'string' || !title.trim()) {
@@ -107,10 +120,14 @@ export async function postBlog(req, res) {
 
         // Broadcast to newsletter subscribers if requested
         let subscribersNotified = 0;
-        if (notifySubscribers && savedBlog.isPublished) {
+        if (notifySubscribers) {
             try {
                 const subscribers = await Subscriber.find({ status: 'active' });
-                subscribersNotified = await broadcastBlogEmail(savedBlog, subscribers);
+                subscribersNotified = await broadcastBlogEmail(savedBlog, subscribers, {
+                    isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !savedBlog.isPublished,
+                    customSubject,
+                    customNote,
+                });
             } catch (notifyErr) {
                 console.error("Failed to notify subscribers:", notifyErr.message);
             }
@@ -150,7 +167,20 @@ export async function updateBlog(req, res) {
             return res.status(400).json({ success: false, message: "Invalid blog ID format" });
         }
 
-        const { title, content, excerpt, coverImage, tags, readTime, slug, isPublished, notifySubscribers } = req.body;
+        const {
+            title,
+            content,
+            excerpt,
+            coverImage,
+            tags,
+            readTime,
+            slug,
+            isPublished,
+            notifySubscribers,
+            isUpcoming,
+            customSubject,
+            customNote,
+        } = req.body;
 
         // Validation for fields being updated
         if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
@@ -188,10 +218,14 @@ export async function updateBlog(req, res) {
 
         // Broadcast to newsletter subscribers if requested
         let subscribersNotified = 0;
-        if (notifySubscribers && updatedBlog.isPublished) {
+        if (notifySubscribers) {
             try {
                 const subscribers = await Subscriber.find({ status: 'active' });
-                subscribersNotified = await broadcastBlogEmail(updatedBlog, subscribers);
+                subscribersNotified = await broadcastBlogEmail(updatedBlog, subscribers, {
+                    isUpcoming: isUpcoming !== undefined ? Boolean(isUpcoming) : !updatedBlog.isPublished,
+                    customSubject,
+                    customNote,
+                });
             } catch (notifyErr) {
                 console.error("Failed to notify subscribers on update:", notifyErr.message);
             }
@@ -221,6 +255,56 @@ export async function updateBlog(req, res) {
         }
         console.error("Error in updateBlog controller:", error);
         res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    }
+}
+
+// POST broadcast existing blog to subscribers (Admin protected)
+export async function broadcastBlog(req, res) {
+    try {
+        const { id } = req.params;
+        const { isUpcoming = false, customSubject = '', customNote = '' } = req.body;
+
+        let blog = null;
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            blog = await Blog.findById(id);
+        }
+        if (!blog) {
+            blog = await Blog.findOne({ slug: id });
+        }
+
+        if (!blog) {
+            return res.status(404).json({ success: false, message: "Blog not found to broadcast" });
+        }
+
+        const subscribers = await Subscriber.find({ status: 'active' });
+        if (subscribers.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "No active subscribers found in database to broadcast to.",
+                sentCount: 0,
+                totalSubscribers: 0,
+            });
+        }
+
+        const sentCount = await broadcastBlogEmail(blog, subscribers, {
+            isUpcoming: Boolean(isUpcoming),
+            customSubject,
+            customNote,
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: `Broadcast sent to ${sentCount} of ${subscribers.length} subscriber(s)!`,
+            sentCount,
+            totalSubscribers: subscribers.length,
+            blogTitle: blog.title,
+        });
+    } catch (error) {
+        console.error("Error in broadcastBlog controller:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to broadcast blog.",
+        });
     }
 }
 

@@ -4,6 +4,7 @@ import {
     getSafeFromEmail,
     getReplyToEmail,
     addContactToAudience,
+    sendOnboardingEmail,
 } from '../utils/resendHelper.js';
 
 export async function subscribeNewsletter(req, res) {
@@ -28,15 +29,11 @@ export async function subscribeNewsletter(req, res) {
 
         // 1. Check / Save in MongoDB
         let subscriber = await Subscriber.findOne({ email: normalizedEmail });
-        let isNewSubscriber = false;
+        let isExistingActive = false;
 
         if (subscriber) {
             if (subscriber.status === 'active') {
-                return res.status(200).json({
-                    success: true,
-                    alreadySubscribed: true,
-                    message: "You're already subscribed to the newsletter!",
-                });
+                isExistingActive = true;
             } else {
                 subscriber.status = 'active';
                 await subscriber.save();
@@ -48,74 +45,42 @@ export async function subscribeNewsletter(req, res) {
                 status: 'active',
             });
             await subscriber.save();
-            isNewSubscriber = true;
         }
 
-        // 2. Resend Integration
-        const resend = getResendClient();
-
-        if (resend) {
-            // Auto sync to Resend Audience if configured
-            const audienceId = process.env.RESEND_AUDIENCE_ID;
-            if (audienceId) {
-                const contactId = await addContactToAudience(normalizedEmail, audienceId);
-                if (contactId) {
-                    subscriber.resendContactId = contactId;
-                    await subscriber.save();
-                }
-            }
-
-            // Send Welcome Email
-            try {
-                const fromEmail = getSafeFromEmail();
-                const replyTo = getReplyToEmail();
-
-                await resend.emails.send({
-                    from: fromEmail,
-                    to: normalizedEmail,
-                    reply_to: replyTo,
-                    subject: "Welcome to my newsletter! ✨",
-                    html: `
-                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 36px 24px; background-color: #0d0d0e; color: #ffffff; border-radius: 16px; border: 1px solid #27272a;">
-                            <div style="margin-bottom: 24px;">
-                                <span style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.25em; color: #a1a1aa;">
-                                    NEWSLETTER SUBSCRIPTION
-                                </span>
-                                <h1 style="font-size: 28px; font-weight: 700; margin: 8px 0 16px; color: #ffffff;">
-                                    Welcome aboard! 🚀
-                                </h1>
-                            </div>
-                            <p style="font-size: 15px; line-height: 1.6; color: #d4d4d8; margin-bottom: 20px;">
-                                Thank you for subscribing. You'll get fresh write-ups, engineering deep dives, and ideas on modern web development directly to your inbox.
-                            </p>
-                            <p style="font-size: 15px; line-height: 1.6; color: #d4d4d8; margin-bottom: 28px;">
-                                No spam, no fluff — only thoughtful articles and insights whenever a new piece is published.
-                            </p>
-                            <div style="padding: 16px 20px; background: rgba(255, 255, 255, 0.05); border-radius: 12px; border-left: 3px solid #ffffff; margin-bottom: 28px;">
-                                <p style="font-size: 13px; color: #e4e4e7; margin: 0; font-style: italic;">
-                                    "Documenting the questions I ask, the things I build, and the ideas I explore along the way."
-                                </p>
-                            </div>
-                            <div style="border-top: 1px solid #27272a; padding-top: 20px; font-size: 12px; color: #71717a;">
-                                <p style="margin: 0;">Sent with care from Nishan's Portfolio & Blog.</p>
-                            </div>
-                        </div>
-                    `,
-                });
-            } catch (emailErr) {
-                console.warn("Resend email dispatch notice:", emailErr.message);
-            }
-        } else {
-            console.log("[Newsletter] RESEND_API_KEY not configured. Subscriber safely stored in MongoDB.");
+        // If user is already active, we can still re-send or sync, but return friendly note
+        if (isExistingActive) {
+            return res.status(200).json({
+                success: true,
+                alreadySubscribed: true,
+                message: "You're already subscribed to the newsletter! We'll keep you posted.",
+            });
         }
+
+        // 2. Resend Audience Sync
+        let audienceResult = { success: false };
+        const audienceId = process.env.RESEND_AUDIENCE_ID;
+        if (audienceId) {
+            audienceResult = await addContactToAudience(normalizedEmail, audienceId);
+            if (audienceResult.success && audienceResult.contactId) {
+                subscriber.resendContactId = audienceResult.contactId;
+                await subscriber.save();
+            }
+        }
+
+        // 3. Send Onboarding / Welcome Email
+        const onboardingResult = await sendOnboardingEmail(normalizedEmail, {
+            source: subscriber.source,
+        });
 
         return res.status(200).json({
             success: true,
-            message: "Thank you for subscribing! Check your inbox for updates.",
+            message: "Thank you for subscribing! Check your inbox for your welcome email.",
             subscriber: {
                 email: subscriber.email,
                 subscribedAt: subscriber.createdAt,
             },
+            audienceSynced: Boolean(audienceResult.success),
+            welcomeEmailSent: Boolean(onboardingResult.success),
         });
     } catch (error) {
         console.error("Error in subscribeNewsletter:", error);
@@ -140,22 +105,54 @@ export async function syncSubscribersToAudience(req, res) {
         }
 
         const activeSubscribers = await Subscriber.find({ status: 'active' });
+        if (activeSubscribers.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "No active subscribers found in database to sync.",
+                totalActive: 0,
+                syncedCount: 0,
+            });
+        }
+
         let syncedCount = 0;
+        let alreadyHasIdCount = 0;
+        let lastError = null;
+        let isRestricted = false;
 
         for (const sub of activeSubscribers) {
-            const contactId = await addContactToAudience(sub.email, audienceId);
-            if (contactId) {
-                sub.resendContactId = contactId;
+            const result = await addContactToAudience(sub.email, audienceId);
+            if (result.success && result.contactId) {
+                sub.resendContactId = result.contactId;
                 await sub.save();
                 syncedCount++;
+            } else {
+                if (result.isRestrictedKey) {
+                    isRestricted = true;
+                    lastError = "Resend API key is restricted to sending emails only.";
+                    break;
+                }
+                if (result.error) {
+                    lastError = result.error;
+                }
             }
+        }
+
+        if (isRestricted) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "Your RESEND_API_KEY only has 'Sending access'. To sync audiences & contacts, create a new API key with 'Full access' in the Resend dashboard (https://resend.com/api-keys) and update backend/.env.",
+                totalActive: activeSubscribers.length,
+                syncedCount,
+            });
         }
 
         return res.status(200).json({
             success: true,
-            message: `Successfully synced ${syncedCount} of ${activeSubscribers.length} subscribers to Resend Audience.`,
+            message: `Successfully synced ${syncedCount} of ${activeSubscribers.length} subscriber(s) to Resend Audience.`,
             totalActive: activeSubscribers.length,
             syncedCount,
+            lastNotice: lastError,
         });
     } catch (error) {
         console.error("Error in syncSubscribersToAudience:", error);
@@ -167,21 +164,53 @@ export async function syncSubscribersToAudience(req, res) {
 }
 
 /**
+ * Send a Test Onboarding Email (Admin Protected)
+ */
+export async function sendTestOnboardingEmail(req, res) {
+    try {
+        const targetEmail = req.body.email || process.env.RESEND_REPLY_TO || 'nishankashyapofficial@gmail.com';
+        const result = await sendOnboardingEmail(targetEmail, { isTest: true });
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.error || "Failed to deliver test onboarding email.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Test onboarding email dispatched to ${targetEmail}! Check your inbox.`,
+            targetEmail,
+            emailId: result.emailId,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to send test onboarding email.",
+        });
+    }
+}
+
+/**
  * Get subscriber statistics (Admin protected)
  */
 export async function getSubscribersStats(req, res) {
     try {
         const total = await Subscriber.countDocuments({});
         const active = await Subscriber.countDocuments({ status: 'active' });
+        const unsubscribed = await Subscriber.countDocuments({ status: 'unsubscribed' });
         const recent = await Subscriber.find({ status: 'active' })
             .sort({ createdAt: -1 })
             .limit(20)
-            .select('email createdAt source');
+            .select('email createdAt source resendContactId');
 
         return res.status(200).json({
             success: true,
             total,
             active,
+            unsubscribed,
+            audienceConfigured: Boolean(process.env.RESEND_AUDIENCE_ID),
             subscribers: recent,
         });
     } catch (error) {

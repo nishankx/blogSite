@@ -1,5 +1,12 @@
 import express from 'express';
-import { getBlogs, getBlog, postBlog, updateBlog, deleteBlog } from '../controllers/blogControllers.js';
+import {
+    getBlogs,
+    getBlog,
+    postBlog,
+    updateBlog,
+    broadcastBlog,
+    deleteBlog,
+} from '../controllers/blogControllers.js';
 import { requireAdminAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -17,6 +24,7 @@ router.get('/:id', getBlog);
 // Admin-protected routes
 router.post('/', requireAdminAuth, postBlog);
 router.put('/:id', requireAdminAuth, updateBlog);
+router.post('/:id/broadcast', requireAdminAuth, broadcastBlog);
 router.delete('/:id', requireAdminAuth, deleteBlog);
 
 export default router;
