@@ -3,7 +3,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const frontendUrl = (process.env.FRONTEND_URL || 'https://blogsite-jyzb.onrender.com').replace(/\/+$/, '');
+export function getFrontendUrl() {
+    return (process.env.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/+$/, '');
+}
 
 function getTransporter() {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
@@ -107,8 +109,9 @@ export async function sendEmail({ to, subject, html, text }) {
  * Custom Welcome Onboarding Email
  */
 export async function sendWelcomeEmail(toEmail) {
+    const baseUrl = getFrontendUrl();
+    const blogsUrl = `${baseUrl}/blogs`;
     const subject = "Welcome to Nishan's Newsletter 🚀";
-    const blogsUrl = `${frontendUrl}/blogs`;
 
     const html = `
     <!DOCTYPE html>
@@ -131,21 +134,31 @@ export async function sendWelcomeEmail(toEmail) {
                                 <h1 style="margin: 0 0 16px 0; font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">
                                     Hey there! Glad to have you here.
                                 </h1>
-                                <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 18px 0;">
+
+                                <div style="margin: 20px 0 24px 0; padding: 18px 22px; background: rgba(255, 255, 255, 0.04); border-left: 3px solid #ffffff; border-radius: 8px;">
+                                    <p style="margin: 0; font-size: 16px; font-style: italic; color: #f4f4f5; line-height: 1.6;">
+                                        “Documenting the questions I ask, the things I build, the ideas I explore, and the person I become along the way.”
+                                    </p>
+                                </div>
+
+                                <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 16px 0;">
                                     Thank you for subscribing to my newsletter. You're now on the list to receive engineering write-ups, deep dives into full-stack systems, machine learning ideas, and unfiltered build logs straight to your inbox.
                                 </p>
                                 <p style="font-size: 15px; line-height: 1.6; color: #a1a1aa; margin: 0 0 28px 0;">
                                     I only write when I have something meaningful and practical to share — no spam, no fluff.
                                 </p>
-                                <div style="margin-bottom: 32px;">
-                                    <a href="${blogsUrl}" style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 24px; border-radius: 10px;">
-                                        Explore Existing Articles →
+                                <div style="margin-bottom: 16px;">
+                                    <a href="${blogsUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 26px; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);">
+                                        Explore the Articles →
                                     </a>
                                 </div>
+                                <p style="font-size: 12px; color: #71717a; margin: 0 0 28px 0; word-break: break-all;">
+                                    Direct link: <a href="${blogsUrl}" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">${blogsUrl}</a>
+                                </p>
                                 <hr style="border: none; border-top: 1px solid #27272a; margin: 28px 0;" />
-                                <p style="font-size: 12px; color: #71717a; margin: 0; line-height: 1.5;">
+                                <p style="font-size: 12px; color: #71717a; margin: 0; line-height: 1.6;">
                                     Sent with ❤️ by <strong>Nishan Kashyap</strong><br />
-                                    Software Engineer & Builder
+                                    Software Engineer & Builder • <a href="${baseUrl}" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">Portfolio</a>
                                 </p>
                             </td>
                         </tr>
@@ -161,7 +174,7 @@ export async function sendWelcomeEmail(toEmail) {
         to: toEmail,
         subject,
         html,
-        text: `Hey! Thank you for subscribing to Nishan's newsletter. You will receive engineering deep dives and build logs straight to your inbox. Visit ${blogsUrl} to read existing posts.`,
+        text: `Hey there! Glad to have you here.\n\n"Documenting the questions I ask, the things I build, the ideas I explore, and the person I become along the way."\n\nThank you for subscribing to my newsletter. You will receive engineering deep dives and build logs straight to your inbox.\n\nVisit ${blogsUrl} to read existing articles.\n\n— Nishan Kashyap`,
     });
 }
 
@@ -174,7 +187,8 @@ export async function broadcastPostEmail(blog, subscribers) {
         return 0;
     }
 
-    const postUrl = `${frontendUrl}/blogs/${blog.slug || blog._id}`;
+    const baseUrl = getFrontendUrl();
+    const postUrl = `${baseUrl}/blogs/${blog.slug || blog._id}`;
     const subject = `New Article: ${blog.title}`;
 
     const html = `
@@ -196,21 +210,26 @@ export async function broadcastPostEmail(blog, subscribers) {
                                     NEW ARTICLE PUBLISHED
                                 </div>
                                 <h1 style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em; line-height: 1.3;">
-                                    ${blog.title}
+                                    <a href="${postUrl}" target="_blank" rel="noopener noreferrer" style="color: #ffffff; text-decoration: none;">
+                                        ${blog.title}
+                                    </a>
                                 </h1>
                                 ${blog.excerpt ? `
                                 <p style="font-size: 15px; line-height: 1.6; color: #d4d4d8; margin: 0 0 24px 0; font-style: italic;">
                                     "${blog.excerpt}"
                                 </p>` : ''}
-                                <div style="margin-bottom: 30px;">
-                                    <a href="${postUrl}" style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 24px; border-radius: 10px;">
+                                <div style="margin-bottom: 16px;">
+                                    <a href="${postUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 26px; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);">
                                         Read Full Article →
                                     </a>
                                 </div>
+                                <p style="font-size: 12px; color: #71717a; margin: 0 0 26px 0; word-break: break-all;">
+                                    Direct link: <a href="${postUrl}" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">${postUrl}</a>
+                                </p>
                                 <hr style="border: none; border-top: 1px solid #27272a; margin: 28px 0;" />
                                 <p style="font-size: 12px; color: #71717a; margin: 0; line-height: 1.5;">
                                     You received this email because you subscribed to Nishan Kashyap's newsletter.<br />
-                                    <a href="${frontendUrl}/blogs" style="color: #a1a1aa; text-decoration: underline;">View All Articles</a>
+                                    <a href="${baseUrl}/blogs" target="_blank" rel="noopener noreferrer" style="color: #a1a1aa; text-decoration: underline;">View All Articles</a>
                                 </p>
                             </td>
                         </tr>
