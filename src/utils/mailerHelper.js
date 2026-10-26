@@ -1,84 +1,43 @@
-import { Resend } from 'resend';
-
-export const getResendClient = () => {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) return null;
-    return new Resend(apiKey);
-};
-
-export const getSafeFromEmail = () => {
-    let fromEmail = process.env.RESEND_FROM_EMAIL || 'Nishan <onboarding@resend.dev>';
-    // If a free email provider (like @gmail.com) is supplied without custom domain verification,
-    // fallback safely to onboarding@resend.dev to prevent 403 API validation errors.
-    if (/@(gmail|yahoo|outlook|hotmail)\.com/i.test(fromEmail)) {
-        fromEmail = 'Nishan <onboarding@resend.dev>';
-    }
-    return fromEmail;
-};
-
-export const getReplyToEmail = () => {
-    return process.env.RESEND_REPLY_TO || 'nishankashyapofficial@gmail.com';
-};
+import nodemailer from 'nodemailer';
 
 /**
- * Add or sync an email to a Resend Audience
+ * Create and return a configured Nodemailer Gmail transporter
  */
-export async function addContactToAudience(email, audienceId = process.env.RESEND_AUDIENCE_ID) {
-    if (!audienceId) {
-        console.warn('[Resend Audience] RESEND_AUDIENCE_ID is not configured.');
-        return { success: false, error: 'RESEND_AUDIENCE_ID not configured' };
+export const getTransporter = () => {
+    const user = process.env.EMAIL_USER || 'nishankashyapofficial@gmail.com';
+    const pass = process.env.EMAIL_APP_PASSWORD;
+
+    if (!pass) {
+        console.warn('[Mailer] EMAIL_APP_PASSWORD is not set in backend/.env. Emails cannot be sent.');
+        return null;
     }
 
-    const resend = getResendClient();
-    if (!resend) {
-        console.warn('[Resend Audience] RESEND_API_KEY is not configured.');
-        return { success: false, error: 'RESEND_API_KEY not configured' };
-    }
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: user.trim(),
+            pass: pass.trim().replace(/\s+/g, ''), // Strip spaces if pasted with spaces
+        },
+    });
+};
 
-    try {
-        const contactRes = await resend.contacts.create({
-            email,
-            unsubscribed: false,
-            audienceId,
-        });
-
-        if (contactRes.error) {
-            console.warn(`[Resend Audience Notice] Adding ${email} failed:`, contactRes.error.message);
-            const isRestricted =
-                contactRes.error.name === 'restricted_api_key' ||
-                contactRes.error.statusCode === 401 ||
-                /restricted/i.test(contactRes.error.message || '');
-
-            return {
-                success: false,
-                error: contactRes.error.message,
-                isRestrictedKey: isRestricted,
-            };
-        }
-
-        console.log(`[Resend Audience] Successfully added ${email} (Contact ID: ${contactRes.data?.id})`);
-        return {
-            success: true,
-            contactId: contactRes.data?.id || null,
-        };
-    } catch (err) {
-        console.warn(`[Resend Audience] Unexpected error adding ${email}:`, err.message);
-        return { success: false, error: err.message };
-    }
-}
+export const getSenderAddress = () => {
+    const name = process.env.EMAIL_SENDER_NAME || 'Nishan Kashyap';
+    const email = process.env.EMAIL_USER || 'nishankashyapofficial@gmail.com';
+    return `"${name}" <${email}>`;
+};
 
 /**
- * Send an Onboarding / Welcome email to a new newsletter subscriber
+ * Send Onboarding / Welcome email to a newly subscribed user
  */
 export async function sendOnboardingEmail(recipientEmail, options = {}) {
-    const resend = getResendClient();
-    if (!resend) {
-        console.log("[Newsletter] RESEND_API_KEY not configured. Skipping onboarding email.");
-        return { success: false, error: "RESEND_API_KEY not configured" };
+    const transporter = getTransporter();
+    if (!transporter) {
+        console.warn('[Mailer] Skipping onboarding email: EMAIL_APP_PASSWORD is not configured.');
+        return { success: false, error: 'EMAIL_APP_PASSWORD is not configured in backend/.env' };
     }
 
-    const fromEmail = getSafeFromEmail();
-    const replyTo = getReplyToEmail();
+    const fromAddress = getSenderAddress();
     const frontendBase = process.env.FRONTEND_URL || 'https://blogsite-jyzb.onrender.com';
     const blogsUrl = `${frontendBase}/blogs`;
 
@@ -92,18 +51,15 @@ export async function sendOnboardingEmail(recipientEmail, options = {}) {
         </head>
         <body style="margin: 0; padding: 0; background-color: #050507; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
             <div style="max-width: 600px; margin: 30px auto; padding: 0 16px;">
-                <!-- Main Container Card -->
                 <div style="background-color: #0b0b0e; border: 1px solid #27272a; border-radius: 24px; padding: 40px 32px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);">
                     
-                    <!-- Top Branding Bar -->
-                    <div style="border-bottom: 1px solid #1f1f23; padding-bottom: 24px; margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between;">
-                        <div>
-                            <span style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.25em; color: #10b981; font-weight: 700;">
-                                ● DISPATCHES & BUILDS
-                            </span>
-                            <div style="font-size: 18px; font-weight: 800; color: #ffffff; margin-top: 4px; letter-spacing: -0.02em;">
-                                NISHAN KASHYAP
-                            </div>
+                    <!-- Branding Header -->
+                    <div style="border-bottom: 1px solid #1f1f23; padding-bottom: 24px; margin-bottom: 32px;">
+                        <span style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.25em; color: #10b981; font-weight: 700;">
+                            ● DISPATCHES & BUILDS
+                        </span>
+                        <div style="font-size: 20px; font-weight: 800; color: #ffffff; margin-top: 4px; letter-spacing: -0.02em;">
+                            NISHAN KASHYAP
                         </div>
                     </div>
 
@@ -116,16 +72,16 @@ export async function sendOnboardingEmail(recipientEmail, options = {}) {
                         Thank you for subscribing to my newsletter. You're now on the list to receive engineering deep dives, software design insights, interactive UI craft, and unfiltered build logs directly to your inbox.
                     </p>
 
-                    <!-- What to Expect Box -->
+                    <!-- What you'll get box -->
                     <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid #27272a; border-radius: 16px; padding: 22px; margin: 28px 0;">
                         <div style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: #a1a1aa; margin-bottom: 12px; font-weight: 600;">
                             WHAT YOU'LL GET
                         </div>
                         <ul style="margin: 0; padding-left: 20px; color: #e4e4e7; font-size: 14px; line-height: 1.8;">
-                            <li><strong>In-depth Engineering Write-ups:</strong> Real architecture patterns, debugging sagas, and full-stack solutions.</li>
-                            <li><strong>UI & Interaction Craft:</strong> Behind-the-scenes teardowns of slick animations and modern design.</li>
-                            <li><strong>Upcoming Project Sneak Peeks:</strong> Early previews of what I'm building before it launches.</li>
-                            <li><strong>Zero Spam:</strong> Sent only when there's something meaningful and practical to share.</li>
+                            <li><strong>Engineering Deep Dives:</strong> Real architecture patterns, debugging sagas, and full-stack solutions.</li>
+                            <li><strong>UI & Interaction Craft:</strong> Behind-the-scenes teardowns of modern web applications.</li>
+                            <li><strong>Upcoming Project Sneak Peeks:</strong> Early previews of what I'm building before it drops.</li>
+                            <li><strong>Zero Spam:</strong> Sent only when there is something genuinely insightful to share.</li>
                         </ul>
                     </div>
 
@@ -136,8 +92,8 @@ export async function sendOnboardingEmail(recipientEmail, options = {}) {
                         </p>
                     </div>
 
-                    <!-- Call to Action Buttons -->
-                    <div style="margin: 32px 0 28px; text-align: left;">
+                    <!-- Call to action buttons -->
+                    <div style="margin: 32px 0 28px;">
                         <a href="${blogsUrl}" style="display: inline-block; background-color: #ffffff; color: #000000; font-family: monospace; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 14px 28px; border-radius: 12px; text-decoration: none; margin-right: 12px; margin-bottom: 10px;">
                             Explore Published Blogs →
                         </a>
@@ -147,7 +103,7 @@ export async function sendOnboardingEmail(recipientEmail, options = {}) {
                     </div>
 
                     <p style="font-size: 14px; line-height: 1.6; color: #a1a1aa; margin-top: 24px;">
-                        Have questions, thoughts, or ideas on what you'd like me to write about? Simply reply directly to this email — I personally read every reply.
+                        Have questions or ideas on what you'd like me to write about? Simply reply directly to this email — I personally read and respond to every note.
                     </p>
 
                     <!-- Footer -->
@@ -166,7 +122,7 @@ Welcome to Nishan's Newsletter!
 
 Thank you for subscribing. You'll receive practical software engineering write-ups, architecture breakdowns, UI craft, and build logs.
 
-Explore the latest write-ups: ${blogsUrl}
+Explore recent write-ups: ${blogsUrl}
 Visit portfolio: ${frontendBase}
 
 Feel free to reply directly to this email anytime.
@@ -174,53 +130,43 @@ Feel free to reply directly to this email anytime.
     `.trim();
 
     try {
-        const sendRes = await resend.emails.send({
-            from: fromEmail,
+        const info = await transporter.sendMail({
+            from: fromAddress,
             to: recipientEmail,
-            reply_to: replyTo,
             subject: "Welcome to my newsletter! 🚀",
             html: htmlContent,
             text: textContent,
         });
 
-        if (sendRes.error) {
-            console.warn(`[Resend Onboarding Error] Failed to send welcome email to ${recipientEmail}:`, sendRes.error.message);
-            if (sendRes.error.statusCode === 403 && /onboarding@resend\.dev/i.test(fromEmail)) {
-                console.info(`[Resend Free Tier Info] Resend free testing sender (onboarding@resend.dev) restricts delivery to your registered Resend account email. Verify your domain at resend.com/domains to send to any recipient.`);
-            }
-            return { success: false, error: sendRes.error.message };
-        }
-
-        console.log(`[Newsletter] Onboarding email successfully sent to ${recipientEmail} (ID: ${sendRes.data?.id})`);
-        return { success: true, emailId: sendRes.data?.id };
+        console.log(`[Mailer] Onboarding email delivered to ${recipientEmail} (MessageId: ${info.messageId})`);
+        return { success: true, messageId: info.messageId };
     } catch (err) {
-        console.warn(`[Newsletter] Unexpected exception sending onboarding email to ${recipientEmail}:`, err.message);
+        console.error(`[Mailer Error] Failed to send onboarding email to ${recipientEmail}:`, err.message);
         return { success: false, error: err.message };
     }
 }
 
 /**
- * Broadcast an email for an upcoming blog preview or newly published blog to subscribers
+ * Broadcast an email for an upcoming blog sneak peek or new published blog to all active subscribers
  * @param {Object} blog - The blog document
  * @param {Array} subscribers - List of subscriber documents
  * @param {Object} options - { isUpcoming: boolean, customSubject: string, customNote: string }
  */
 export async function broadcastBlogEmail(blog, subscribers, options = {}) {
-    const resend = getResendClient();
-    if (!resend) {
-        console.log("[Newsletter] RESEND_API_KEY not configured. Skipping email broadcast.");
+    const transporter = getTransporter();
+    if (!transporter) {
+        console.warn('[Mailer] Skipping broadcast: EMAIL_APP_PASSWORD is not configured in backend/.env.');
         return 0;
     }
 
     if (!subscribers || subscribers.length === 0) {
-        console.log("[Newsletter] No active subscribers to notify.");
+        console.log('[Mailer] No active subscribers found to broadcast to.');
         return 0;
     }
 
     const { isUpcoming = false, customSubject = '', customNote = '' } = options;
 
-    const fromEmail = getSafeFromEmail();
-    const replyTo = getReplyToEmail();
+    const fromAddress = getSenderAddress();
     const frontendBase = process.env.FRONTEND_URL || 'https://blogsite-jyzb.onrender.com';
     const articleUrl = blog.slug
         ? `${frontendBase}/blogs/${blog.slug}`
@@ -264,7 +210,6 @@ export async function broadcastBlogEmail(blog, subscribers, options = {}) {
             <div style="max-width: 620px; margin: 30px auto; padding: 0 16px;">
                 <div style="background-color: #0b0b0e; border: 1px solid #27272a; border-radius: 24px; padding: 40px 32px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);">
                     
-                    <!-- Header pill -->
                     <div style="margin-bottom: 20px;">
                         <span style="font-family: monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.25em; color: ${badgeColor}; font-weight: 700;">
                             ${badgeLabel}
@@ -301,31 +246,23 @@ export async function broadcastBlogEmail(blog, subscribers, options = {}) {
         </html>
     `;
 
-    // Prepare individual email payloads
-    const emailPayloads = subscribers.map((sub) => ({
-        from: fromEmail,
-        to: sub.email,
-        reply_to: replyTo,
-        subject,
-        html: htmlContent,
-    }));
-
     let sentCount = 0;
-    // Resend batch endpoint accepts up to 100 emails per batch
-    for (let i = 0; i < emailPayloads.length; i += 100) {
-        const chunk = emailPayloads.slice(i, i + 100);
+
+    // Send emails sequentially or in small parallel batches of 5 to avoid SMTP burst limits
+    for (const sub of subscribers) {
         try {
-            const batchRes = await resend.batch.send(chunk);
-            if (batchRes?.data) {
-                sentCount += chunk.length;
-            } else if (batchRes?.error) {
-                console.error(`[Newsletter Broadcast Error on batch ${i / 100 + 1}]:`, batchRes.error.message);
-            }
-        } catch (batchErr) {
-            console.error(`[Newsletter Broadcast Exception on batch ${i / 100 + 1}]:`, batchErr.message);
+            await transporter.sendMail({
+                from: fromAddress,
+                to: sub.email,
+                subject,
+                html: htmlContent,
+            });
+            sentCount++;
+        } catch (err) {
+            console.error(`[Mailer Broadcast Error] Failed sending to ${sub.email}:`, err.message);
         }
     }
 
-    console.log(`[Newsletter] Broadcasted "${blog.title}" (${isUpcoming ? 'upcoming' : 'published'}) to ${sentCount}/${subscribers.length} subscriber(s).`);
+    console.log(`[Mailer] Broadcasted "${blog.title}" (${isUpcoming ? 'upcoming' : 'published'}) to ${sentCount}/${subscribers.length} subscriber(s).`);
     return sentCount;
 }

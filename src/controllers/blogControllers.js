@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import Blog from '../models/Blog.js';
 import Subscriber from '../models/Subscriber.js';
-import { broadcastBlogEmail } from '../utils/resendHelper.js';
+import { broadcastBlogEmail } from '../utils/mailerHelper.js';
 
 // GET all blogs
 export async function getBlogs(req, res) {
